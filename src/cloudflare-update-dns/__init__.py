@@ -60,13 +60,13 @@ def main():
         print("Failed to get dns records from CloudFlare")
         print(e)
         exit(3)
-    
-    if len(records) <=0:
+
+    if len(records) <= 0:
         print("Records not found")
         exit(3)
-    
+
     record = records[0]
-    record_id = record["content"]
+    record_ip = record["content"]
 
     try:
         ip_real = get_real_ip()
@@ -74,5 +74,20 @@ def main():
         print("Failed to get current ip")
         print(e)
         exit(3)
-    print(record_id)
-    print(ip_real)
+    if record_ip == ip_real:
+        print("IP match, do nothing")
+        exit(0)
+
+    print(f"Updating DNS ip to {ip_real}")
+    try:
+        cf.zones.dns_records.patch(
+            zone["id"],
+            record["id"],
+            data={"content": ip_real},
+        )
+    except BaseException as e:
+        print("Failed to update dns ip")
+        print(e)
+        exit(3)
+    print("Update successfully")
+    exit(0)
