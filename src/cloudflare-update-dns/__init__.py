@@ -6,6 +6,7 @@ from typing import Optional
 from CloudFlare import CloudFlare
 
 from .ip import get_ip as get_real_ip
+from .result import Result
 
 
 def main():
@@ -18,7 +19,7 @@ def main():
     except BaseException as e:
         print("Failed to parse options")
         print(e)
-        exit(1)
+        exit(Result.FATAL)
 
     for option, value in options:
         if option in ("-e", "--email"):
@@ -32,15 +33,15 @@ def main():
 
     if token is None:
         print("Require API Token or API Key")
-        exit(2)
+        exit(Result.FATAL)
 
     if zone is None:
         print("Require zone")
-        exit(2)
+        exit(Result.FATAL)
 
     if dns_a is None:
         print("Require dns-a value to update")
-        exit(2)
+        exit(Result.FATAL)
 
     cf = CloudFlare(email=email, token=token)
     try:
@@ -48,10 +49,10 @@ def main():
     except BaseException as e:
         print("Failed to get zones from CloudFlare")
         print(e)
-        exit(3)
+        exit(Result.RETRY)
     if len(zones) <= 0:
         print("No zone found")
-        exit(3)
+        exit(Result.FATAL)
     zone = zones[0]
 
     try:
@@ -59,11 +60,11 @@ def main():
     except BaseException as e:
         print("Failed to get dns records from CloudFlare")
         print(e)
-        exit(3)
+        exit(Result.RETRY)
 
     if len(records) <= 0:
         print("Records not found")
-        exit(3)
+        exit(Result.FATAL)
 
     record = records[0]
     record_ip = record["content"]
@@ -73,10 +74,10 @@ def main():
     except BaseException as e:
         print("Failed to get current ip")
         print(e)
-        exit(3)
+        exit(Result.RETRY)
     if record_ip == ip_real:
         print("IP match, do nothing")
-        exit(0)
+        exit(Result.SUCESS)
 
     print(f"Updating DNS ip to {ip_real}")
     try:
@@ -88,6 +89,6 @@ def main():
     except BaseException as e:
         print("Failed to update dns ip")
         print(e)
-        exit(3)
+        exit(Result.FATAL)
     print("Update successfully")
-    exit(0)
+    exit(Result.RETRY)
