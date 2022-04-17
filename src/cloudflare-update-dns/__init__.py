@@ -1,4 +1,5 @@
 from getopt import gnu_getopt
+from logging import basicConfig as loggingBasicConfig, getLogger
 from pprint import pprint
 from sys import argv, exit
 from typing import Optional
@@ -9,18 +10,25 @@ from .ip import get_ip as get_real_ip
 from .result import Result
 
 
+loggingBasicConfig(format="%(asctime)s %(levelname)7s  %(message)s")
+log = getLogger()
+log.setLevel("INFO")
+
+
 def main():
     email: Optional[str] = None
     token: Optional[str] = None
     zone: Optional[str] = None
     dns_a: Optional[str] = None
+    log.info("Starting")
     try:
+        log.debug("Parse options")
         options, extras = gnu_getopt(argv[1:], "e:t:z:", ["email=", "token=", "zone=", "dns-a="])
     except BaseException as e:
-        print("Failed to parse options")
-        print(e)
+        log.error("Failed to parse options", exc_info=e)
         exit(Result.FATAL)
 
+    log.debug("Decode options")
     for option, value in options:
         if option in ("-e", "--email"):
             email = value
@@ -31,55 +39,59 @@ def main():
         elif option == "--dns-a":
             dns_a = value
 
+    log.debug("Checking token")
     if token is None:
-        print("Require API Token or API Key")
+        log.error("Require API Token or API Key")
         exit(Result.FATAL)
 
+    log.debug("Checking Zone")
     if zone is None:
-        print("Require zone")
+        log.error("Require zone")
         exit(Result.FATAL)
 
+    log.debug("Checking DNS-A")
     if dns_a is None:
-        print("Require dns-a value to update")
+        log.error("Require dns-a value to update")
         exit(Result.FATAL)
 
     cf = CloudFlare(email=email, token=token)
     try:
+        log.debug("Getting CloudFlare Zones")
         zones = cf.zones.get(params={"name": zone, "per_page": 1})
     except BaseException as e:
-        print("Failed to get zones from CloudFlare")
-        print(e)
+        log.error("Failed to get zones from CloudFlare", exc_info=e)
         exit(Result.RETRY)
     if len(zones) <= 0:
-        print("No zone found")
+        log.error("No zone found")
         exit(Result.FATAL)
     zone = zones[0]
 
     try:
+        log.debug("Getting CloudFlare Records for choosen Zone")
         records = cf.zones.dns_records.get(zone["id"], params={"type": "A", "name": dns_a})
     except BaseException as e:
-        print("Failed to get dns records from CloudFlare")
-        print(e)
+        log.error("Failed to get dns records from CloudFlare", exc_info=e)
         exit(Result.RETRY)
 
     if len(records) <= 0:
-        print("Records not found")
+        log.error("Records not found")
         exit(Result.FATAL)
 
     record = records[0]
     record_ip = record["content"]
 
     try:
+        log.debug("Getting IP from ipify")
         ip_real = get_real_ip()
     except BaseException as e:
-        print("Failed to get current ip")
-        print(e)
+        log.error("Failed to get current IP", exc_info=e)
         exit(Result.RETRY)
+    log.debug("Compare current IP with CloudFlare IP")
     if record_ip == ip_real:
-        print("IP match, do nothing")
+        log.info("IP match, do nothing")
         exit(Result.SUCESS)
 
-    print(f"Updating DNS ip to {ip_real}")
+    log.info(f"Updating DNS ip to {ip_real}")
     try:
         cf.zones.dns_records.patch(
             zone["id"],
@@ -87,8 +99,7 @@ def main():
             data={"content": ip_real},
         )
     except BaseException as e:
-        print("Failed to update dns ip")
-        print(e)
+        log.error("Failed to update dns ip", exc_info=e)
         exit(Result.FATAL)
-    print("Update successfully")
+    log.info("Update successfully")
     exit(Result.RETRY)
